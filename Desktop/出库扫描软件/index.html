@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量扫描二维码</title>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        video { width: 100%; max-width: 400px; border: 0.1px solid #474747; border-radius: 10px; }
+        button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #scannedList { list-style: none; padding: 0; }
+        #scannedList li { background: #f0f0f0; padding: 10px; margin: 5px; border-radius: 5px; text-align: left; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); width: 90%; max-width: 400px; }
+        .modal select, .modal button { margin: 10px; padding: 10px; font-size: 16px; width: 100%; }
+        .modal h3 { margin: 0 0 10px; }
+    </style>
+</head>
+<body>
+    <h2>批量扫描二维码</h2>
+    <video id="preview"></video>
+    <br>
+    <button onclick="startScanner()">开始扫描</button>
+    <button onclick="exportToXLS()">导出 Excel</button>
+    <ul id="scannedList"></ul>
+    <audio id="beepSound" src="https://www.soundjay.com/button/beep-07.wav"></audio>
+
+    <!-- 弹窗 -->
+    <div id="modal" class="modal">
+        <h3>第 <span id="scanCount">1</span> 笔</h3>
+        <label for="product">品名：</label>
+        <select id="product">
+            <option value="装饰摆件">装饰摆件</option>
+            <option value="玩具">玩具</option>
+            <option value="相框装饰配件">相框装饰配件</option>
+            <option value="钥匙扣">钥匙扣</option>
+            <option value="收纳盒">收纳盒</option>
+        </select>
+        <br>
+        <label for="carrier">承运商编号：</label>
+        <select id="carrier">
+            <option value="虾皮店到店">虾皮店到店</option>
+            <option value="711">711</option>
+            <option value="全家">全家</option>
+            <option value="OK Mart">OK Mart</option>
+            <option value="宅配通">宅配通</option>
+        </select>
+        <br>
+        <label for="remark">备注：</label>
+        <select id="remark">
+            <option value="J">J</option>
+            <option value="P">P</option>
+            <option value="L">L</option>
+            <option value="DA">DA</option>
+            <option value="其他">其他</option>
+        </select>
+        <br>
+        <button onclick="submitModal()">确认</button>
+    </div>
+
+    <script>
+        let scannedCodes = new Map();
+        let codeReader = new ZXing.BrowserMultiFormatReader();
+        let isScanning = false;
+        let currentCode = null;
+        let scanCount = 1;
+
+        function startScanner() {
+            if (isScanning) return;
+            isScanning = true;
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(() => {
+                    codeReader.decodeFromVideoDevice(undefined, 'preview', (result, err) => {
+                        if (result) {
+                            document.getElementById("beepSound").play();
+                            currentCode = result.text;
+                            document.getElementById('scanCount').textContent = scanCount;
+                            showModal();
+                        }
+                    }).catch(err => {
+                        alert("无法访问摄像头，请检查权限！");
+                        console.error(err);
+                    });
+                })
+                .catch(err => {
+                    alert("请检查摄像头权限或使用支持的浏览器！");
+                    console.error(err);
+                });
+        }
+
+        function showModal() {
+            document.getElementById('modal').style.display = 'block';
+        }
+
+        function submitModal() {
+            let product = document.getElementById('product').value;
+            let carrier = document.getElementById('carrier').value;
+            let remark = document.getElementById('remark').value;
+
+            let timestamp = new Date().toLocaleString();
+            scannedCodes.set(currentCode, { timestamp, product, carrier, remark, scanCount });
+
+            let li = document.createElement('li');
+            li.textContent = `第 ${scanCount} 笔 - ${currentCode} （${timestamp}） - 品名: ${product}, 承运商: ${carrier}, 备注: ${remark}`;
+            document.getElementById('scannedList').prepend(li); // 将最新数据放在最前面
+            window.scrollTo(0, 0); // 滚动到顶部
+
+            document.getElementById('modal').style.display = 'none';
+            currentCode = null;
+            scanCount++;
+        }
+
+        function exportToXLS() {
+            let today = new Date();
+            let months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+            let fileName = `${months[today.getMonth()]}${today.getDate()}号出货表格.xls`;
+            console.log(fileName); // 例如：3月16号出货表格.xls
+
+
+            let table = `<?xml version="1.0"?>
+                <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+                          xmlns:o="urn:schemas-microsoft-com:office:office"
+                          xmlns:x="urn:schemas-microsoft-com:office:excel"
+                          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+                <Styles>
+                    <Style ss:ID="s1">
+                        <Alignment ss:Horizontal="Center"/>
+                        <Borders>
+                            <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
+                            <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
+                            <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
+                            <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
+                        </Borders>
+                    </Style>
+                </Styles>
+                <Worksheet ss:Name="Sheet1">
+                    <Table>`;
+
+            let columnHeaders = [
+                "运单号", "订单号", "收件人电话", "收件人姓名", "收件人手机号", "品名", "客户编号", "收件人地址", "货物类型编号",
+                "代收货款", "实际重量", "国家", "时效编号", "承运商编号", "备注", "门店号码", "门店名称", "扫描时间"
+            ];
+
+            let hiddenColumns = [0, 2, 3, 4, 7, 8, 9, 10, 15, 16];
+
+            // 设置列宽
+            columnHeaders.forEach((_, index) => {
+                let width = "";
+                if (index === 1 || index === 17) width = ' ss:Width="110"'; // B 和 R 列
+                if (index === 5 || index === 13) width = ' ss:Width="80"';  // F 和 N 列
+                let hidden = hiddenColumns.includes(index) ? ' ss:Hidden="1"' : '';
+                table += `<Column${width}${hidden}/>`;
+            });
+
+            table += `<Row>`;
+            columnHeaders.forEach((header, index) => {
+                let hidden = hiddenColumns.includes(index) ? ' ss:Hidden="1"' : '';
+                table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${header}</Data></Cell>`;
+            });
+            table += `</Row>`;
+
+            scannedCodes.forEach((data, code) => {
+                table += `<Row>`;
+                columnHeaders.forEach((_, index) => {
+                    let hidden = hiddenColumns.includes(index) ? ' ss:Hidden="1"' : '';
+                    if (index === 1) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${code}</Data></Cell>`;
+                    } else if (index === 5) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.product}</Data></Cell>`; // F列
+                    } else if (index === 6) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">486696</Data></Cell>`; // G列
+                    } else if (index === 11) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">中国台湾</Data></Cell>`; // L列
+                    } else if (index === 12) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">空运</Data></Cell>`; // M列
+                    } else if (index === 13) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.carrier}</Data></Cell>`; // N列
+                    } else if (index === 14) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.remark}</Data></Cell>`; // O列
+                    } else if (index === 17) {
+                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.timestamp}</Data></Cell>`; // R列
+                    } else {
+                        table += `<Cell ss:StyleID="s1"${hidden}></Cell>`;
+                    }
+                });
+                table += `</Row>`;
+            });
+
+            table += `</Table></Worksheet></Workbook>`;
+
+            let blob = new Blob([table], { type: "application/vnd.ms-excel" });
+            let a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>
