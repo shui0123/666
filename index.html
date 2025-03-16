@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>批量扫描二维码</title>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
         video { width: 100%; max-width: 400px; border: 0.1px solid #474747; border-radius: 10px; }
@@ -21,7 +22,7 @@
     <video id="preview"></video>
     <br>
     <button onclick="startScanner()">开始扫描</button>
-    <button onclick="exportToXLS()">导出 Excel</button>
+    <button onclick="exportToXLSX()">导出 Excel</button>
     <ul id="scannedList"></ul>
     <audio id="beepSound" src="https://www.soundjay.com/button/beep-07.wav"></audio>
 
@@ -76,6 +77,7 @@
                             document.getElementById("beepSound").play();
                             currentCode = result.text;
                             document.getElementById('scanCount').textContent = scanCount;
+                            resetModal(); // 重置弹窗选项
                             showModal();
                         }
                     }).catch(err => {
@@ -91,6 +93,12 @@
 
         function showModal() {
             document.getElementById('modal').style.display = 'block';
+        }
+
+        function resetModal() {
+            document.getElementById('product').selectedIndex = 0;
+            document.getElementById('carrier').selectedIndex = 0;
+            document.getElementById('remark').selectedIndex = 0;
         }
 
         function submitModal() {
@@ -111,91 +119,86 @@
             scanCount++;
         }
 
-        function exportToXLS() {
+        function exportToXLSX() {
             let today = new Date();
             let months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
-            let fileName = `${months[today.getMonth()]}${today.getDate()}号出货表格.xls`;
-            console.log(fileName); // 例如：3月16号出货表格.xls
-
-
-            let table = `<?xml version="1.0"?>
-                <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-                          xmlns:o="urn:schemas-microsoft-com:office:office"
-                          xmlns:x="urn:schemas-microsoft-com:office:excel"
-                          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-                <Styles>
-                    <Style ss:ID="s1">
-                        <Alignment ss:Horizontal="Center"/>
-                        <Borders>
-                            <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
-                            <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
-                            <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
-                            <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A0A0"/>
-                        </Borders>
-                    </Style>
-                </Styles>
-                <Worksheet ss:Name="Sheet1">
-                    <Table>`;
+            let fileName = `${months[today.getMonth()]}${today.getDate()}号出货表格.xlsx`;
 
             let columnHeaders = [
                 "运单号", "订单号", "收件人电话", "收件人姓名", "收件人手机号", "品名", "客户编号", "收件人地址", "货物类型编号",
                 "代收货款", "实际重量", "国家", "时效编号", "承运商编号", "备注", "门店号码", "门店名称", "扫描时间"
             ];
 
-            let hiddenColumns = [0, 2, 3, 4, 7, 8, 9, 10, 15, 16];
+            let hiddenColumns = [0, 2, 3, 4, 7, 8, 9, 10, 15, 16]; // 需要隐藏的列索引
+
+            let data = [];
+            data.push(columnHeaders); // 添加表头
+
+            scannedCodes.forEach((value, key) => {
+                let row = new Array(columnHeaders.length).fill(""); // 初始化空行
+                row[1] = key; // 订单号
+                row[5] = value.product; // 品名
+                row[6] = "486696"; // 客户编号
+                row[11] = "中国台湾"; // 国家
+                row[12] = "空运"; // 时效编号
+                row[13] = value.carrier; // 承运商编号
+                row[14] = value.remark; // 备注
+                row[17] = value.timestamp; // 扫描时间
+                data.push(row);
+            });
+
+            let ws = XLSX.utils.aoa_to_sheet(data);
 
             // 设置列宽
-            columnHeaders.forEach((_, index) => {
-                let width = "";
-                if (index === 1 || index === 17) width = ' ss:Width="110"'; // B 和 R 列
-                if (index === 5 || index === 13) width = ' ss:Width="80"';  // F 和 N 列
-                let hidden = hiddenColumns.includes(index) ? ' ss:Hidden="1"' : '';
-                table += `<Column${width}${hidden}/>`;
+            const colWidths = [
+                { wch: 10 }, // A列
+                { wch: 20 }, // B列
+                { wch: 15 }, // C列
+                { wch: 15 }, // D列
+                { wch: 15 }, // E列
+                { wch: 15 }, // F列
+                { wch: 10 }, // G列
+                { wch: 20 }, // H列
+                { wch: 15 }, // I列
+                { wch: 10 }, // J列
+                { wch: 10 }, // K列
+                { wch: 10 }, // L列
+                { wch: 10 }, // M列
+                { wch: 15 }, // N列
+                { wch: 10 }, // O列
+                { wch: 10 }, // P列
+                { wch: 10 }, // Q列
+                { wch: 20 }  // R列
+            ];
+            ws['!cols'] = colWidths;
+
+            // 设置边框样式
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let R = range.s.r; R <= range.e.r; ++R) {
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                    if (!ws[cellAddress]) continue;
+                    ws[cellAddress].s = {
+                        border: {
+                            top: { style: 'thin', color: { rgb: 'A0A0A0' } },
+                            left: { style: 'thin', color: { rgb: 'A0A0A0' } },
+                            bottom: { style: 'thin', color: { rgb: 'A0A0A0' } },
+                            right: { style: 'thin', color: { rgb: 'A0A0A0' } }
+                        },
+                        alignment: { horizontal: 'center' }
+                    };
+                }
+            }
+
+            // 隐藏列
+            hiddenColumns.forEach(colIndex => {
+                if (!ws['!cols']) ws['!cols'] = [];
+                ws['!cols'][colIndex] = { hidden: true };
             });
 
-            table += `<Row>`;
-            columnHeaders.forEach((header, index) => {
-                let hidden = hiddenColumns.includes(index) ? ' ss:Hidden="1"' : '';
-                table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${header}</Data></Cell>`;
-            });
-            table += `</Row>`;
-
-            scannedCodes.forEach((data, code) => {
-                table += `<Row>`;
-                columnHeaders.forEach((_, index) => {
-                    let hidden = hiddenColumns.includes(index) ? ' ss:Hidden="1"' : '';
-                    if (index === 1) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${code}</Data></Cell>`;
-                    } else if (index === 5) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.product}</Data></Cell>`; // F列
-                    } else if (index === 6) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">486696</Data></Cell>`; // G列
-                    } else if (index === 11) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">中国台湾</Data></Cell>`; // L列
-                    } else if (index === 12) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">空运</Data></Cell>`; // M列
-                    } else if (index === 13) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.carrier}</Data></Cell>`; // N列
-                    } else if (index === 14) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.remark}</Data></Cell>`; // O列
-                    } else if (index === 17) {
-                        table += `<Cell ss:StyleID="s1"${hidden}><Data ss:Type="String">${data.timestamp}</Data></Cell>`; // R列
-                    } else {
-                        table += `<Cell ss:StyleID="s1"${hidden}></Cell>`;
-                    }
-                });
-                table += `</Row>`;
-            });
-
-            table += `</Table></Worksheet></Workbook>`;
-
-            let blob = new Blob([table], { type: "application/vnd.ms-excel" });
-            let a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, fileName);
         }
     </script>
 </body>
